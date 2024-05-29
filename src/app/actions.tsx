@@ -1,10 +1,10 @@
 'use server';
 
-import { createAI, getMutableAIState, streamUI } from 'ai/rsc';
-import {createOpenAI} from '@ai-sdk/openai';
+import {createAI, createStreamableUI, getMutableAIState, streamUI} from 'ai/rsc';
+import { createOpenAI } from '@ai-sdk/openai';
 import { ReactNode } from 'react';
-import { z } from 'zod';
 import { nanoid } from 'nanoid';
+import {experimental_streamText, streamText} from "ai";
 
 export interface ServerMessage {
   role: 'user' | 'assistant';
@@ -25,47 +25,56 @@ export async function continueConversation(
   input: string,
 ): Promise<ClientMessage> {
   'use server';
-  
-  
 
   const history = getMutableAIState();
 
-  const result = await streamUI({
-    model: openAI('gpt-4o'),
-    messages: [...history.get(), { role: 'user', content: input }],
-    text: ({ content, done }) => {
-      if (done) {
-        history.done((messages: ServerMessage[]) => [
-          ...messages,
-          { role: 'assistant', content },
-        ]);
-      }
+  const uiStream = createStreamableUI();
+  
+  void (async () => {
+    const result = await streamText({
+      model: openAI('gpt-4o'),
+      messages: [...history.get(), { role: 'user', content: input }],
+      // text: ({ content, done }) => {
+      //   if (done) {
+      //     history.done((messages: ServerMessage[]) => [
+      //       ...messages,
+      //       { role: 'assistant', content },
+      //     ]);
+      //   }
+      //
+      //   return <div>{content}</div>;
+      // },
+      // tools: {
+      //   deploy: {
+      //     description: 'Deploy repository to vercel',
+      //     parameters: z.object({
+      //       repositoryName: z
+      //         .string()
+      //         .describe('The name of the repository, example: vercel/ai-chatbot'),
+      //     }),
+      //     generate: async function* ({ repositoryName }) {
+      //       yield <div>Cloning repository {repositoryName}...</div>; // [!code highlight:5]
+      //       await new Promise(resolve => setTimeout(resolve, 3000));
+      //       yield <div>Building repository {repositoryName}...</div>;
+      //       await new Promise(resolve => setTimeout(resolve, 2000));
+      //       return <div>{repositoryName} deployed!</div>;
+      //     },
+      //   },
+      // },
+    });
 
-      return <div>{content}</div>;
-    },
-    // tools: {
-    //   deploy: {
-    //     description: 'Deploy repository to vercel',
-    //     parameters: z.object({
-    //       repositoryName: z
-    //         .string()
-    //         .describe('The name of the repository, example: vercel/ai-chatbot'),
-    //     }),
-    //     generate: async function* ({ repositoryName }) {
-    //       yield <div>Cloning repository {repositoryName}...</div>; // [!code highlight:5]
-    //       await new Promise(resolve => setTimeout(resolve, 3000));
-    //       yield <div>Building repository {repositoryName}...</div>;
-    //       await new Promise(resolve => setTimeout(resolve, 2000));
-    //       return <div>{repositoryName} deployed!</div>;
-    //     },
-    //   },
-    // },
-  });
+    for await (const delta of result.fullStream) {
+      if (delta.type === 'text-delta') {
+        console.log(delta);
+        uiStream.append(delta.textDelta);
+      }
+    }  
+  })();
 
   return {
     id: nanoid(),
     role: 'assistant',
-    display: result.value,
+    display: uiStream.value,
   };
 }
 
