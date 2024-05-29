@@ -55,3 +55,5 @@ export default function Home() {
       </form>
   </div>
 )};
+
+export const dynamic = "force-dynamic"
