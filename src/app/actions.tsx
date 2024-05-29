@@ -65,10 +65,14 @@ export async function continueConversation(
 
     for await (const delta of result.fullStream) {
       if (delta.type === 'text-delta') {
-        console.log(delta);
         uiStream.append(delta.textDelta);
       }
-    }  
+      if (delta.type === 'finish') {
+        console.log("done");
+        uiStream.done();  
+      }
+    }
+    
   })();
 
   return {
